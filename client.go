@@ -4,7 +4,6 @@ import (
 	"errors"
 	"go/ast"
 	"go/token"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,44 +58,44 @@ type Middleware interface {
 }
 
 type Client struct {
-	httpClient   *http.Client
+	httpClient      *http.Client
 	annotationCache map[string]*request
-	beforeIndex int
-	afterIndex int
-	beforeRequest []RequestHandler
-	afterResponse []ResponseHandler
+	beforeIndex     int
+	afterIndex      int
+	beforeRequest   []RequestHandler
+	afterResponse   []ResponseHandler
 	IParse
 }
 
-func NewClient() IClient{
+func NewClient(parse IParse) IClient {
 	return &Client{
-		httpClient: http.DefaultClient,
+		httpClient:      http.DefaultClient,
 		annotationCache: make(map[string]*request),
-		IParse: NewPareRequestArgs(),
-		beforeRequest: make([]RequestHandler, 1),
-		afterResponse: make([]ResponseHandler, 1),
+		IParse:          parse,
+		beforeRequest:   make([]RequestHandler, 1),
+		afterResponse:   make([]ResponseHandler, 1),
 	}
 }
 
-func (c *Client) UseRequest(handler ...RequestHandler)  {
+func (c *Client) UseRequest(handler ...RequestHandler) {
 	c.beforeRequest = append(c.beforeRequest, handler...)
 }
 
-func (c *Client) NextRequestHandler(req *http.Request){
+func (c *Client) NextRequestHandler(req *http.Request) {
 	c.beforeIndex++
-	for c.beforeIndex < len(c.beforeRequest){
+	for c.beforeIndex < len(c.beforeRequest) {
 		c.beforeRequest[c.beforeIndex](req)
 		c.beforeIndex++
 	}
 }
 
-func (c *Client) UseResponse(handler ...ResponseHandler)  {
+func (c *Client) UseResponse(handler ...ResponseHandler) {
 	c.afterResponse = append(c.afterResponse, handler...)
 }
 
-func (c *Client) NextResponseHandler(resp *http.Response)  {
+func (c *Client) NextResponseHandler(resp *http.Response) {
 	c.afterIndex++
-	for c.afterIndex < len(c.afterResponse){
+	for c.afterIndex < len(c.afterResponse) {
 		c.afterResponse[c.afterIndex](resp)
 		c.afterIndex++
 	}
@@ -121,8 +120,8 @@ func (c *Client) Register(pkgPath string) error {
 
 		for _, decl := range decls {
 			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok {
-				return parseFail
+			if !ok || genDecl.Doc == nil {
+				continue
 			}
 
 			// 解析注解
@@ -134,8 +133,7 @@ func (c *Client) Register(pkgPath string) error {
 					method = strings.Replace(method, "method=", "", -1)
 					_, ok := Method[method]
 					if !ok {
-						log.Println(ok)
-						return methodFail
+						continue
 					}
 
 					url := urlRegex.FindString(annotation)
@@ -148,7 +146,7 @@ func (c *Client) Register(pkgPath string) error {
 					for _, v := range genDecl.Specs {
 						typeSpec, ok := v.(*ast.TypeSpec)
 						if !ok {
-							return parseFail
+							continue
 						}
 
 						c.annotationCache[typeSpec.Name.Obj.Name] = &request{
@@ -168,10 +166,10 @@ func (c *Client) Register(pkgPath string) error {
 	return nil
 }
 
-func (c *Client) Do(req, resp interface{}, encode IEncode) error  {
+func (c *Client) Do(req, resp interface{}, encode IEncode) error {
 	// 请求解析 req
 	value := reflect.ValueOf(req)
-	if value.Kind() == reflect.Ptr{
+	if value.Kind() == reflect.Ptr {
 		value = value.Elem()
 	}
 	requestStruct, ok := c.annotationCache[value.Type().Name()]
@@ -180,7 +178,7 @@ func (c *Client) Do(req, resp interface{}, encode IEncode) error  {
 	}
 
 	httpRequest, err := c.Parse(req, requestStruct.Method, requestStruct.Url)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 
@@ -190,15 +188,21 @@ func (c *Client) Do(req, resp interface{}, encode IEncode) error  {
 	if err != nil {
 		return err
 	}
-	if httpResponse.Body != nil{
+	if httpResponse.Body != nil {
 		defer httpResponse.Body.Close()
 	}
 
 	// 执行响应中间件
 	c.NextResponseHandler(httpResponse)
-	if err = encode.Encode(httpResponse, resp); err != nil{
+	if err = encode.Encode(httpResponse, resp); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+var JsonCode = NewJsonEncode()
+
+func (c *Client) JsonDo(req, resp interface{}) error {
+	return c.Do(req, resp, JsonCode)
 }

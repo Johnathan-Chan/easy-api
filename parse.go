@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
+	"io"
 	"net/http"
 	url2 "net/url"
 	"reflect"
@@ -31,7 +32,7 @@ func (p *PareRequestArgs) Parse(req interface{}, method, url string) (*http.Requ
 	}
 
 	queries := url2.Values{}
-	var json bool
+	var json map[string]interface{}
 	for i:=0; i<value.NumField(); i++{
 		arg := value.Field(i)
 
@@ -54,30 +55,28 @@ func (p *PareRequestArgs) Parse(req interface{}, method, url string) (*http.Requ
 
 		jsons := argType.Tag.Get("json")
 		if jsons != ""{
-			json = true
+			if json == nil{
+				json = make(map[string]interface{})
+			}
+			json[jsons] = arg.Interface()
 			continue
 		}
 	}
 
-	if json{
+	var buff io.Reader
+	if json != nil{
 		data, err := jsoniter.Marshal(req)
 		if err != nil{
 			return nil, err
 		}
 
-		buff := bytes.NewBuffer(data)
-		httpRequest, err := http.NewRequest(method, url+"?"+queries.Encode(), buff)
-		if err != nil{
-			return nil, err
-		}
-
-		return httpRequest, nil
-	}else{
-		httpRequest, err := http.NewRequest(method, url+"?"+queries.Encode(), nil)
-		if err != nil{
-			return nil, err
-		}
-
-		return httpRequest, nil
+		buff = bytes.NewBuffer(data)
 	}
+
+	httpRequest, err := http.NewRequest(method, url+"?"+queries.Encode(), buff)
+	if err != nil{
+		return nil, err
+	}
+
+	return httpRequest, nil
 }
