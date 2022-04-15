@@ -2,14 +2,8 @@ package easy_api
 
 import (
 	"errors"
-	"go/ast"
-	"go/token"
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
-	"regexp"
-	"strings"
 )
 
 const (
@@ -45,7 +39,7 @@ var (
 )
 
 type IClient interface {
-	Register(string) error
+	Register(method, path string, object interface{})
 	Do(interface{}, interface{}, IEncode) error
 	Middleware
 }
@@ -101,70 +95,79 @@ func (c *Client) NextResponseHandler(resp *http.Response) {
 	}
 }
 
-func (c *Client) Register(pkgPath string) error {
-	fileSet := token.NewFileSet()
-	goRegex := regexp.MustCompile("(.go)$")
-	annotationRegex := regexp.MustCompile(ANNOTION_REQUEST)
-	methodRegex := regexp.MustCompile(METHOD)
-	urlRegex := regexp.MustCompile(URL)
-
-	if err := filepath.Walk(pkgPath, func(path string, info os.FileInfo, err error) error {
-		if !goRegex.MatchString(info.Name()) {
-			return nil
-		}
-
-		decls, err := ScanComments(path, fileSet)
-		if err != nil {
-			return err
-		}
-
-		for _, decl := range decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Doc == nil {
-				continue
-			}
-
-			// 解析注解
-			for _, comment := range genDecl.Doc.List {
-				if annotationRegex.MatchString(comment.Text) {
-					annotation := annotationRegex.FindString(comment.Text)
-					method := methodRegex.FindString(annotation)
-					method = strings.Replace(method, "\"", "", -1)
-					method = strings.Replace(method, "method=", "", -1)
-					_, ok := Method[method]
-					if !ok {
-						continue
-					}
-
-					url := urlRegex.FindString(annotation)
-					url = strings.Replace(url, "\"", "", -1)
-					url = strings.Replace(url, "url=", "", -1)
-					if url == "" {
-						return urlFail
-					}
-
-					for _, v := range genDecl.Specs {
-						typeSpec, ok := v.(*ast.TypeSpec)
-						if !ok {
-							continue
-						}
-
-						c.annotationCache[typeSpec.Name.Obj.Name] = &request{
-							Method: method,
-							Url:    url,
-						}
-					}
-				}
-			}
-
-		}
-		return nil
-	}); err != nil {
-		return err
+func (c *Client) Register(method, path string, object interface{}) {
+	objectType := reflect.TypeOf(object)
+	if objectType.Kind() == reflect.Ptr {
+		objectType = objectType.Elem()
 	}
 
-	return nil
+	c.annotationCache[objectType.Name()] = &request{Method: method, Url: path}
 }
+
+//func (c *Client) Register(pkgPath string) error {
+//	fileSet := token.NewFileSet()
+//	goRegex := regexp.MustCompile("(.go)$")
+//	annotationRegex := regexp.MustCompile(ANNOTION_REQUEST)
+//	methodRegex := regexp.MustCompile(METHOD)
+//	urlRegex := regexp.MustCompile(URL)
+//
+//	if err := filepath.Walk(pkgPath, func(path string, info os.FileInfo, err error) error {
+//		if !goRegex.MatchString(info.Name()) {
+//			return nil
+//		}
+//
+//		decls, err := ScanComments(path, fileSet)
+//		if err != nil {
+//			return err
+//		}
+//
+//		for _, decl := range decls {
+//			genDecl, ok := decl.(*ast.GenDecl)
+//			if !ok || genDecl.Doc == nil {
+//				continue
+//			}
+//
+//			// 解析注解
+//			for _, comment := range genDecl.Doc.List {
+//				if annotationRegex.MatchString(comment.Text) {
+//					annotation := annotationRegex.FindString(comment.Text)
+//					method := methodRegex.FindString(annotation)
+//					method = strings.Replace(method, "\"", "", -1)
+//					method = strings.Replace(method, "method=", "", -1)
+//					_, ok := Method[method]
+//					if !ok {
+//						continue
+//					}
+//
+//					url := urlRegex.FindString(annotation)
+//					url = strings.Replace(url, "\"", "", -1)
+//					url = strings.Replace(url, "url=", "", -1)
+//					if url == "" {
+//						return urlFail
+//					}
+//
+//					for _, v := range genDecl.Specs {
+//						typeSpec, ok := v.(*ast.TypeSpec)
+//						if !ok {
+//							continue
+//						}
+//
+//						c.annotationCache[typeSpec.Name.Obj.Name] = &request{
+//							Method: method,
+//							Url:    url,
+//						}
+//					}
+//				}
+//			}
+//
+//		}
+//		return nil
+//	}); err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
 
 func (c *Client) Do(req, resp interface{}, encode IEncode) error {
 	// 请求解析 req

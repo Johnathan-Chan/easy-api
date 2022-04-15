@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-// GetSheetInfoRequest @Request(method="GET", url="https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/:SpreadsheetToken/metainfo")
 type GetSheetInfoRequest struct {
 	SpreadsheetToken string `param:"SpreadsheetToken"`
 	ExtFields        string `query:"ext_fields"`
@@ -30,9 +29,8 @@ func main() {
 	client := easy_api.NewClient(easy_api.NewPareRequestArgs())
 
 	// 注册注解
-	if err := client.Register("./example"); err != nil{
-		panic(err)
-	}
+	client.Register(http.MethodGet, "https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/:SpreadsheetToken/metainfo", GetSheetInfoRequest{})
+
 	// 请求中间件
 	client.UseRequest(SetGlobalMiddleware)
 
