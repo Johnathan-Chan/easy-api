@@ -62,8 +62,6 @@ func NewClient(parse IParse) IClient {
 		httpClient:      http.DefaultClient,
 		annotationCache: make(map[string]*request),
 		IParse:          parse,
-		beforeRequest:   make([]RequestHandler, 1),
-		afterResponse:   make([]ResponseHandler, 1),
 	}
 }
 
