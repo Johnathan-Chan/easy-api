@@ -12,7 +12,7 @@ type GetSheetInfoRequest struct {
 	UserIdType       string `query:"user_id_type"`
 }
 
-func SetGlobalMiddleware(req *http.Request){
+func SetGlobalMiddleware(req *http.Request) error{
 	// 默认 Header Content-Type
 	if req.Header.Get("Content-Type") == "" {
 		req.Header.Set("Content-Type", "application/json")
@@ -23,6 +23,7 @@ func SetGlobalMiddleware(req *http.Request){
 	//
 	//// 添加 User-Agent
 	//req.Header.Set("User-Agent", "fastwego/feishu")
+	return nil
 }
 
 func main() {

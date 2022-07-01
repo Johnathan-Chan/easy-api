@@ -24,8 +24,8 @@ var Method = map[string]struct{}{
 	http.MethodTrace:   {},
 }
 
-type RequestHandler func(*http.Request)
-type ResponseHandler func(*http.Response)
+type RequestHandler func(*http.Request) error
+type ResponseHandler func(*http.Response) error
 
 type request struct {
 	Method string
@@ -102,7 +102,9 @@ func (c *Client) Do(req, resp interface{}, encode IEncode) error {
 
 	// 执行请求中间件
 	for _, beforeRequest := range c.beforeRequest{
-		beforeRequest(httpRequest)
+		if err = beforeRequest(httpRequest); err != nil{
+			return err
+		}
 	}
 	httpResponse, err := c.httpClient.Do(httpRequest)
 	if err != nil {
@@ -114,7 +116,9 @@ func (c *Client) Do(req, resp interface{}, encode IEncode) error {
 
 	// 执行响应中间件
 	for _, afterResponse := range c.afterResponse{
-		afterResponse(httpResponse)
+		if err = afterResponse(httpResponse); err != nil{
+			return err
+		}
 	}
 	if err = encode.Encode(httpResponse, resp); err != nil {
 		return err
